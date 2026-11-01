@@ -1,0 +1,6 @@
+{
+  "name": "EcoTrack - E-Waste Collection & EPR Credit Management Platform",
+  "description": "Unified platform connecting citizens, authorized collection partners, recyclers, organizations, and administrators to track e-waste lifecycles, verified weights, and EPR credit records.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
