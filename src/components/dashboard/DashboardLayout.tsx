@@ -20,6 +20,7 @@ import {
 import { UserRole, NotificationItem } from '../../types';
 import { store } from '../../lib/store';
 import { getSupabaseConfig } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface NavItem {
   id: string;
@@ -50,6 +51,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  const { logout, loginDemoPersona } = useAuth();
   const currentUser = store.getCurrentUser();
   const state = store.getState();
   const supabaseConfig = getSupabaseConfig();
@@ -69,8 +71,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
   const CurrentRoleIcon = roleMeta[currentUser.role]?.icon || User;
 
-  const handleRoleSelect = (role: UserRole) => {
-    store.switchRole(role);
+  const handleRoleSelect = async (role: UserRole) => {
+    try {
+      await loginDemoPersona(role);
+      await store.switchRole(role);
+    } catch (e) {
+      console.warn('Demo persona switch notice:', e);
+      await store.switchRole(role);
+    }
     setRoleMenuOpen(false);
   };
 
@@ -154,6 +162,17 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Return to Public Website</span>
+          </button>
+
+          <button
+            onClick={async () => {
+              await logout();
+              onReturnHome();
+            }}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
           </button>
         </div>
       </aside>

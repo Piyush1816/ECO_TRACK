@@ -41,22 +41,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const verifiedPickupsForBatch = state.pickups.filter(p => p.status === 'verified');
   const batchesAwaitingEpr = state.batches.filter(b => b.status === 'completed' && b.recyclingRecord && !b.recyclingRecord.adminVerified);
 
-  const partners = state.users.filter(u => u.role === 'partner');
-  const recyclers = state.users.filter(u => u.role === 'recycler');
+  const partners = state.partners.map(p => p.profile);
+  const recyclers = state.recyclers.map(r => r.profile);
 
   const totalVerifiedWeight = state.eprLedger.reduce((sum, item) => sum + item.verifiedWeightKg, 0)
     + state.pickups.filter(p => p.status === 'verified').reduce((sum, p) => sum + (p.weightVerification?.verifiedWeightKg || 0), 0);
   
   const totalCredits = state.eprLedger.reduce((sum, item) => sum + item.creditAmount, 0);
 
-  const handleAssignPartner = (requestId: string) => {
+  const [adminActionError, setAdminActionError] = useState<string | null>(null);
+
+  const handleAssignPartner = async (requestId: string) => {
     const partnerId = selectedPartnerForAssign[requestId] || partners[0]?.id;
     if (!partnerId) return;
-    store.assignPartnerToPickup(requestId, partnerId);
+    setAdminActionError(null);
+    try {
+      await store.assignPartnerToPickup(requestId, partnerId);
+    } catch (err: any) {
+      console.error('Assign partner error:', err);
+      setAdminActionError(err.message || 'Failed to assign partner to pickup');
+    }
   };
 
-  const handleVerifyEprRecord = (batchId: string) => {
-    store.verifyRecyclingAndIssueEpr(batchId);
+  const handleVerifyEprRecord = async (batchId: string) => {
+    setAdminActionError(null);
+    try {
+      await store.verifyRecyclingAndIssueEpr(batchId);
+    } catch (err: any) {
+      console.error('Verify EPR error:', err);
+      setAdminActionError(err.message || 'Failed to verify recycling record and issue EPR credits');
+    }
   };
 
   return (

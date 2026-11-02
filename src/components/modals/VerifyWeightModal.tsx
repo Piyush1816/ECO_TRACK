@@ -6,7 +6,8 @@ import {
   AlertCircle, 
   CheckCircle2, 
   ArrowRight,
-  Sparkles
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 import { PickupRequest } from '../../types';
 import { store } from '../../lib/store';
@@ -30,6 +31,9 @@ export const VerifyWeightModal: React.FC<VerifyWeightModalProps> = ({
   const [notes, setNotes] = useState<string>(
     'Verified against digital scale readout and field collector slip. Zero discrepancies identified.'
   );
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
   const category = INITIAL_CATEGORIES.find(c => c.id === pickup.categoryId) || INITIAL_CATEGORIES[0];
@@ -37,21 +41,32 @@ export const VerifyWeightModal: React.FC<VerifyWeightModalProps> = ({
   const varianceKg = Number((verifiedWeightKg - actualWeight).toFixed(2));
   const estimatedDiffKg = Number((verifiedWeightKg - pickup.estimatedWeightKg).toFixed(2));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (verifiedWeightKg <= 0) return;
 
-    store.verifyWeight({
-      requestId: pickup.id,
-      verifiedWeightKg,
-      notes
-    });
+    setErrorMessage(null);
+    setIsSubmitting(true);
 
-    setSubmitted(true);
+    try {
+      await store.verifyWeight({
+        requestId: pickup.id,
+        verifiedWeightKg,
+        notes
+      });
+
+      setSubmitted(true);
+    } catch (err: any) {
+      console.error('Failed to verify weight:', err);
+      setErrorMessage(err.message || 'Failed to verify weight in Supabase database.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleFinish = () => {
     setSubmitted(false);
+    setErrorMessage(null);
     onClose();
   };
 
@@ -71,16 +86,26 @@ export const VerifyWeightModal: React.FC<VerifyWeightModalProps> = ({
               Admin Weight Verification Terminal
             </h3>
             <p className="text-xs text-[#64748B]">
-              Quality Assurance & Mass Balance Cross-Check
+              Quality Assurance & Mass Balance Cross-Check in PostgreSQL
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleFinish}
             className="p-1.5 rounded-lg text-[#64748B] hover:text-[#17231C] hover:bg-slate-100 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {errorMessage && (
+          <div className="m-5 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold block">Verification Error:</span>
+              <span>{errorMessage}</span>
+            </div>
+          </div>
+        )}
 
         {submitted ? (
           <div className="p-8 text-center space-y-4">
@@ -89,7 +114,7 @@ export const VerifyWeightModal: React.FC<VerifyWeightModalProps> = ({
             </div>
             <div>
               <h4 className="text-xl font-bold text-[#17231C]">
-                Weight Successfully Verified!
+                Weight Successfully Verified in PostgreSQL!
               </h4>
               <p className="text-xs text-[#64748B] max-w-md mx-auto mt-2 leading-relaxed">
                 Official verified weight of <span className="font-bold text-[#17231C]">{verifiedWeightKg} kg</span> approved. <span className="font-bold text-[#15803D]">+{pointsAwarded} Eco-Points</span> credited to {pickup.userFullName}. Record is ready for recycling batch consolidation.
@@ -182,16 +207,24 @@ export const VerifyWeightModal: React.FC<VerifyWeightModalProps> = ({
             <div className="pt-4 border-t border-[#E2E8E4] flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleFinish}
                 className="px-4 py-2 font-semibold text-[#64748B] hover:text-[#17231C]"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 font-semibold text-white bg-[#15803D] hover:bg-[#166534] rounded-lg transition-colors shadow-sm"
+                disabled={isSubmitting}
+                className="px-5 py-2 font-semibold text-white bg-[#15803D] hover:bg-[#166534] rounded-lg transition-colors shadow-sm flex items-center gap-1.5 disabled:opacity-50"
               >
-                Approve & Credit Weight
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Verifying Weight...</span>
+                  </>
+                ) : (
+                  <span>Approve & Credit Weight</span>
+                )}
               </button>
             </div>
 

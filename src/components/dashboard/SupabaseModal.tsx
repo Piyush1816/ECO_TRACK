@@ -179,25 +179,26 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ isOpen, onClose })
               </button>
             </div>
             <p className="text-[11px] text-[#64748B]">
-              Run the migration in your Supabase SQL Editor:
+              Run the migrations in your Supabase SQL Editor:
             </p>
-            <div className="p-2 bg-white rounded border border-[#E2E8E4] font-mono text-[11px] text-[#17231C]">
-              supabase/migrations/20261101_init_ecotrack.sql
+            <div className="p-2 bg-white rounded border border-[#E2E8E4] font-mono text-[11px] text-[#17231C] space-y-1">
+              <div>1. supabase/migrations/20261101_init_ecotrack.sql</div>
+              <div>2. supabase/migrations/20261102_security_rls_and_fixes.sql</div>
             </div>
           </div>
 
-          {/* Reset Demo Data Button */}
+          {/* Refresh Data Button */}
           <div className="pt-2 border-t border-[#E2E8E4] flex items-center justify-between">
             <button
               type="button"
-              onClick={() => {
-                store.resetDemoData();
+              onClick={async () => {
+                await store.refreshData();
                 onClose();
               }}
-              className="text-xs text-amber-700 hover:text-amber-800 font-medium flex items-center gap-1"
+              className="text-xs text-emerald-700 hover:text-emerald-800 font-medium flex items-center gap-1"
             >
               <RefreshCw className="w-3 h-3" />
-              <span>Reset Demo Seed Data</span>
+              <span>Refresh Supabase Records</span>
             </button>
 
             <div className="flex items-center gap-2">

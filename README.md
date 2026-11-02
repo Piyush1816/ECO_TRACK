@@ -1,42 +1,51 @@
 # EcoTrack — E-Waste Collection & EPR Credit Management Platform
 
-**EcoTrack** is a full-stack, enterprise-grade environmental technology web platform designed to streamline electronic waste (e-waste) collection, multi-tier logistics, verified material recovery, and Extended Producer Responsibility (EPR) credit ledger tracking.
+**EcoTrack** is a production-grade, full-stack environmental technology web application built to streamline electronic waste (e-waste) collection, reverse logistics, verified material recovery, and Extended Producer Responsibility (EPR) credit management.
+
+EcoTrack is connected to **Supabase** (PostgreSQL, Supabase Authentication, Supabase Storage, and Realtime Postgres Changes) with complete non-recursive Row-Level Security (RLS) policies, atomic database triggers, and audit logging.
 
 ---
 
-## 🌟 Key Highlights
+## 🌟 Key Capabilities
 
-- **Role-Based Workspaces**: 5 specialized dashboards for Citizens, Collection Partners, Certified Recyclers, Organizations/Producers, and Platform Administrators.
+- **Role-Based Workspaces**: 5 specialized workspaces for Citizens, Collection Partners, Certified Recyclers, Organizations/Producers, and Platform Administrators.
 - **End-to-End Chain of Custody**:
-  1. **Citizen / Org Request**: Schedule doorstep pickup with estimated weights and e-waste category classification.
-  2. **Admin Logistics Routing**: Dispatch to certified Collection Partners by service zone.
-  3. **Collection & On-Site Weighing**: Partner logs actual weight, photographs seal tags, and uploads digital weighing slips.
-  4. **Admin Weight Verification**: Quality assurance cross-checking with tolerance validation.
+  1. **Citizen / Org Request**: Schedule doorstep pickup with estimated weights, device descriptions, and e-waste category classification.
+  2. **Admin Logistics Routing**: Dispatch to authorized Collection Partners by geographic zone and vehicle capacity.
+  3. **Collection & On-Site Weighing**: Partner logs actual calibrated weight, photographs seal tags, and uploads digital weighing slips to Supabase Storage.
+  4. **Admin Scale QA Verification**: Quality assurance cross-checking with automated variance calculation and automatic citizen eco-points crediting.
   5. **Recycling Dispatch**: Consolidate verified e-waste into sealed manifest batches for processing.
-  6. **Material Recovery**: Recyclers process metals, plastics, glass, and safely dispose of hazardous fractions.
-  7. **EPR Credit Ledger**: Tamper-evident ledger logging verified weights, recycling yields, and compliance credits.
+  6. **Material Recovery & Mass Balance**: Recyclers process metals, plastics, glass, and safely dispose of hazardous fractions with strict mass balance checks.
+  7. **EPR Credit Ledger**: Tamper-evident ledger logging verified weights, recycling yields, and compliance credits with cryptographic transaction hashes.
 - **Environmental Impact Analytics**: Real-time calculations for CO2 emissions prevented, toxic heavy metals diverted, and precious metals reclaimed.
 - **Gamified Citizen Incentives**: Eco-points earned per verified kg, redeemable for native tree planting, green tech vouchers, and eco-merchandise.
-- **Supabase & PostgreSQL Ready**: Complete schema migrations with foreign keys, checks, indexes, and Row-Level Security (RLS) rules.
+- **Real Supabase Backend**:
+  - PostgreSQL schema with 16 relational tables and constraints.
+  - Supabase Auth supporting real signup, login, password resets, and demo account authentication.
+  - Non-recursive RLS security policies using `is_admin()` and `get_auth_role()` helper functions.
+  - Supabase Storage buckets (`ewaste-photos`, `weighing-slips`, `recycling-documents`, `epr-manifests`) with mime validation and signed URL generation.
+  - Realtime subscriptions to `pickup_requests`, `notifications`, `ewaste_batches`, and `epr_ledger`.
 
 ---
 
-## 👥 User Roles & Capabilities
+## 👥 User Roles & Personas
 
-| Role | Core Workflow & Capabilities |
-| :--- | :--- |
-| **Citizen** | Schedule residential pickup, select e-waste categories, track real-time collection stages, view verified weight slips, earn eco-points, redeem rewards, view personal environmental impact. |
-| **Collection Partner** | Receive assigned pickup requests, accept/reject route dispatches, schedule vehicle/agent, capture actual collected weight, upload weighing slip & photos, submit for verification. |
-| **Recycler** | Receive consolidated batches, record inbound weight, document material separation (Copper, Aluminum, Gold, Glass, Plastics, Hazardous Residue), upload recycling certificates, submit for EPR qualification. |
-| **Organization (Bulk Producer)** | Schedule corporate bulk IT asset disposition (ITAD), track enterprise e-waste manifests, monitor annual EPR quota targets, download audit-ready compliance certificates. |
-| **Administrator** | Approve partners and recyclers, route collection assignments, verify weight records, batch e-waste for processing, review recycling yield declarations, maintain EPR ledger, inspect immutable audit logs. |
+| Role | Demo Credentials | Capabilities |
+| :--- | :--- | :--- |
+| **Citizen** | `citizen@ecotrack.org` / `EcoCitizen2026!` | Schedule residential pickup, select e-waste categories, track real-time collection stages, view verified weight slips, earn eco-points, redeem rewards, view personal environmental impact. |
+| **Collection Partner** | `partner@ecotrack.org` / `EcoPartner2026!` | Receive assigned pickup requests, accept/reject route dispatches, schedule vehicle/agent, capture actual collected weight, upload weighing slip & photos, submit for verification. |
+| **Recycler** | `recycler@ecotrack.org` / `EcoRecycler2026!` | Receive consolidated batches, record inbound dock weight, document material separation (Copper, Aluminum, Gold, Glass, Plastics, Hazardous Residue), upload recycling certificates, submit for EPR qualification. |
+| **Organization (Bulk Producer)** | `org@ecotrack.org` / `EcoOrg2026!` | Schedule corporate bulk IT asset disposition (ITAD), track enterprise e-waste manifests, monitor annual EPR quota targets, download audit-ready compliance certificates. |
+| **Administrator** | `admin@ecotrack.org` / `EcoAdmin2026!` | Route collection assignments, verify weight records, batch e-waste for processing, review recycling yield declarations, maintain EPR ledger, inspect immutable audit logs. |
 
 ---
 
-## 🗄️ Database Architecture (PostgreSQL / Supabase)
+## 🗄️ Database Architecture & Migrations
 
-EcoTrack features a 16-table relational schema located in `supabase/migrations/20261101_init_ecotrack.sql`:
+The database migrations are located in `supabase/migrations/`:
 
+### 1. `20261101_init_ecotrack.sql`
+Defines the 16 core relational tables:
 1. `profiles`: User accounts, roles (`citizen`, `partner`, `recycler`, `organization`, `admin`), points.
 2. `organizations`: Corporate entity data, annual EPR compliance quota.
 3. `partner_details`: Collection agency licensing, vehicle fleet size, zones, calibration dates.
@@ -54,22 +63,44 @@ EcoTrack features a 16-table relational schema located in `supabase/migrations/2
 15. `rewards` & `reward_redemptions`: Citizen incentives and claim codes.
 16. `audit_logs`: Detailed operational and security event trails.
 
+### 2. `20261102_security_rls_and_fixes.sql`
+- **Security Definer Functions**: Non-recursive `public.is_admin()` and `public.get_auth_role()` to eliminate RLS infinite recursion.
+- **Auth Sync Trigger**: `on_auth_user_created` trigger on `auth.users` automatically synchronizes new signups to `public.profiles`.
+- **Role Protection Trigger**: `trg_protect_profile_role` prevents regular users from elevating their role.
+- **Variance Trigger**: Computes `variance_kg = verified_weight_kg - actual_weight_kg` from `collection_records`.
+- **Row-Level Security Policies**: Enforced on all 16 tables.
+- **Storage Buckets & Policies**: Creates `ewaste-photos`, `weighing-slips`, `recycling-documents`, and `epr-manifests` with authenticated upload and read permissions.
+
 ---
 
-## 🚀 Quick Start & Supabase Configuration
+## 🚀 Setup & Execution
 
-### 1. Environment Variables
-Copy `.env.example` to `.env`:
-```bash
+### 1. Configure Environment Variables
+Set the following in `.env` (or via the in-app Supabase Config modal):
+```env
 VITE_SUPABASE_URL="https://your-project.supabase.co"
-VITE_SUPABASE_ANON_KEY="your-anon-key"
+VITE_SUPABASE_ANON_KEY="your-anon-publishable-key"
+
+# For one-time server-side demo provisioning script:
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 ```
 
-### 2. Standalone & Live Preview Mode
-EcoTrack contains an integrated **Hybrid Storage Engine**:
-- If Supabase environment variables are provided, EcoTrack connects directly to your live Supabase cloud database.
-- If running in standalone preview or before setting up Supabase, EcoTrack seamlessly utilizes its rich, interactive local store pre-populated with realistic seed data across all 5 roles.
-- You can connect your live Supabase project at any time via the **"Supabase Config"** button in the top navigation or settings.
+### 2. Run Database Migrations
+Execute the SQL files in your Supabase SQL Editor:
+1. `supabase/migrations/20261101_init_ecotrack.sql`
+2. `supabase/migrations/20261102_security_rls_and_fixes.sql`
+
+### 3. Provision Demo Accounts in Supabase Auth
+Run the provisioning script to create the 5 authentic Supabase Auth accounts and seed profiles:
+```bash
+npm run seed:demo
+```
+
+### 4. Run Development Server
+```bash
+npm run dev
+```
+Dev server runs at `http://localhost:3000`.
 
 ---
 

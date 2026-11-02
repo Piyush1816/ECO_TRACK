@@ -57,18 +57,37 @@ export const PartnerDashboard: React.FC<PartnerDashboardProps> = ({
     (sum, p) => sum + (p.collectionRecord?.actualWeightKg || 0), 0
   );
 
-  const handleAccept = (requestId: string) => {
-    store.respondToAssignment(requestId, true);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleAccept = async (requestId: string) => {
+    setActionError(null);
+    try {
+      await store.respondToAssignment(requestId, true);
+    } catch (err: any) {
+      console.error('Accept error:', err);
+      setActionError(err.message || 'Failed to accept assignment');
+    }
   };
 
-  const handleReject = (requestId: string) => {
-    const reason = window.prompt('Specify rationale for route rejection (e.g., Fleet capacity exceeded):') || 'Capacity limit';
-    store.respondToAssignment(requestId, false, reason);
+  const handleReject = async (requestId: string) => {
+    setActionError(null);
+    try {
+      await store.respondToAssignment(requestId, false, 'Route capacity limit reached');
+    } catch (err: any) {
+      console.error('Reject error:', err);
+      setActionError(err.message || 'Failed to reject assignment');
+    }
   };
 
-  const handleScheduleSubmit = (requestId: string) => {
-    store.schedulePickup(requestId, scheduledAt, assignedAgentName, vehicleReg);
-    setSchedulingPickupId(null);
+  const handleScheduleSubmit = async (requestId: string) => {
+    setActionError(null);
+    try {
+      await store.schedulePickup(requestId, scheduledAt, assignedAgentName, vehicleReg);
+      setSchedulingPickupId(null);
+    } catch (err: any) {
+      console.error('Schedule error:', err);
+      setActionError(err.message || 'Failed to schedule pickup');
+    }
   };
 
   return (
@@ -137,6 +156,16 @@ export const PartnerDashboard: React.FC<PartnerDashboardProps> = ({
           <span className="text-[11px] text-[#64748B] mt-0.5 block">Dispatched to recyclers</span>
         </div>
       </div>
+
+      {actionError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{actionError}</span>
+          </div>
+          <button onClick={() => setActionError(null)} className="text-red-500 hover:text-red-800 font-bold">×</button>
+        </div>
+      )}
 
       {/* SECTION 1: Pending Acceptance Dispatches */}
       {pendingAcceptance.length > 0 && (

@@ -50,8 +50,16 @@ export const RecyclerDashboard: React.FC<RecyclerDashboardProps> = ({
     sum + (b.recyclingRecord?.preciousMetalsGrams || 0), 0
   );
 
-  const handleConfirmReceipt = (batchId: string) => {
-    store.confirmBatchReceipt(batchId);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
+
+  const handleConfirmReceipt = async (batchId: string) => {
+    setReceiptError(null);
+    try {
+      await store.confirmBatchReceipt(batchId);
+    } catch (err: any) {
+      console.error('Confirm receipt error:', err);
+      setReceiptError(err.message || 'Failed to confirm batch receipt');
+    }
   };
 
   return (

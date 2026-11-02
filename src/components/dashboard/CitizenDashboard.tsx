@@ -51,12 +51,16 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({
   );
   const co2AvoidedKg = Math.round(verifiedWeightKg * 2.3);
 
-  const handleRedeem = (reward: RewardItem) => {
-    const res = store.redeemReward(reward.id);
-    if (res.success) {
-      setRedeemFeedback({ msg: res.message, code: res.claimCode });
-    } else {
-      setRedeemFeedback({ msg: res.message });
+  const handleRedeem = async (reward: RewardItem) => {
+    try {
+      const res = await store.redeemReward(reward.id);
+      if (res.success) {
+        setRedeemFeedback({ msg: res.message, code: res.claimCode });
+      } else {
+        setRedeemFeedback({ msg: res.message });
+      }
+    } catch (err: any) {
+      setRedeemFeedback({ msg: err.message || 'Failed to redeem reward' });
     }
   };
 

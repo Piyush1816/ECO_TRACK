@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { store, AppState } from './lib/store';
 import { PickupRequest, EWasteBatch, EprLedgerEntry, UserRole } from './types';
+import { useAuth } from './contexts/AuthContext';
 
 // Public Components
 import { Navbar } from './components/public/Navbar';
@@ -48,6 +49,7 @@ import { ProcessRecyclingModal } from './components/modals/ProcessRecyclingModal
 import { EprCertificateModal } from './components/modals/EprCertificateModal';
 
 export default function App() {
+  const { profile, user, role } = useAuth();
   const [appState, setAppState] = useState<AppState>(store.getState());
   const [currentTab, setCurrentTab] = useState<string>('home');
   const [activeDashboardSubTab, setActiveDashboardSubTab] = useState<string>('overview');
@@ -72,6 +74,11 @@ export default function App() {
   const [certificateModalOpen, setCertificateModalOpen] = useState(false);
   const [targetCertificateEntry, setTargetCertificateEntry] = useState<EprLedgerEntry | null>(null);
 
+  // Initialize store and load data on auth profile change
+  useEffect(() => {
+    store.init(profile);
+  }, [profile]);
+
   // Subscribe to store updates
   useEffect(() => {
     const unsubscribe = store.subscribe((newState) => {
@@ -80,7 +87,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const currentUser = store.getCurrentUser();
+  const currentUser = profile || appState.currentUser;
 
   // Handlers
   const handleOpenPickupWithCategory = (catId: string) => {

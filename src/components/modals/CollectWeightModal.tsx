@@ -7,10 +7,13 @@ import {
   FileCheck, 
   Upload, 
   ShieldCheck, 
-  CheckCircle2 
+  CheckCircle2,
+  AlertCircle,
+  Loader2 
 } from 'lucide-react';
 import { PickupRequest } from '../../types';
 import { store } from '../../lib/store';
+import { storageService } from '../../services/storageService';
 
 interface CollectWeightModalProps {
   isOpen: boolean;
@@ -31,26 +34,53 @@ export const CollectWeightModal: React.FC<CollectWeightModalProps> = ({
     `SEAL-2026-${Math.floor(10000 + Math.random() * 90000)}`
   );
   const [notes, setNotes] = useState<string>('Weighed on certified calibrated fleet digital scale. Tamper seal attached.');
-  const [slipFileName, setSlipFileName] = useState<string>('calibrated_scale_readout_slip.jpg');
+  
+  const [slipFile, setSlipFile] = useState<File | null>(null);
+  const [slipFileName, setSlipFileName] = useState<string | null>(null);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (actualWeightKg <= 0 || itemCount <= 0 || !sealTagNumber) return;
 
-    store.submitCollectionRecord({
-      requestId: pickup.id,
-      actualWeightKg,
-      itemCount,
-      sealTagNumber,
-      notes
-    });
+    setErrorMessage(null);
+    setIsSubmitting(true);
 
-    setSubmitted(true);
+    try {
+      let slipUrl: string | undefined = undefined;
+      if (slipFile) {
+        const uploadRes = await storageService.uploadFile('weighing-slips', slipFile.name, slipFile);
+        if (uploadRes.url) {
+          slipUrl = uploadRes.url;
+        }
+      }
+
+      await store.submitCollectionRecord({
+        requestId: pickup.id,
+        actualWeightKg,
+        itemCount,
+        sealTagNumber,
+        weighingSlipUrl: slipUrl,
+        notes
+      });
+
+      setSubmitted(true);
+    } catch (err: any) {
+      console.error('Failed to submit collection record:', err);
+      setErrorMessage(err.message || 'Failed to submit collection record to Supabase.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleFinish = () => {
     setSubmitted(false);
+    setSlipFile(null);
+    setSlipFileName(null);
+    setErrorMessage(null);
     onClose();
   };
 
@@ -74,12 +104,22 @@ export const CollectWeightModal: React.FC<CollectWeightModalProps> = ({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleFinish}
             className="p-1.5 rounded-lg text-[#64748B] hover:text-[#17231C] hover:bg-slate-100 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {errorMessage && (
+          <div className="m-5 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold block">Submission Error:</span>
+              <span>{errorMessage}</span>
+            </div>
+          </div>
+        )}
 
         {submitted ? (
           <div className="p-8 text-center space-y-4">
@@ -88,10 +128,10 @@ export const CollectWeightModal: React.FC<CollectWeightModalProps> = ({
             </div>
             <div>
               <h4 className="text-xl font-bold text-[#17231C]">
-                Collection Manifest Logged!
+                Collection Manifest Logged in Supabase!
               </h4>
               <p className="text-xs text-[#64748B] max-w-md mx-auto mt-2 leading-relaxed">
-                Actual weight of <span className="font-bold text-[#17231C]">{actualWeightKg} kg</span> and Security Seal <span className="font-mono text-[#15803D] font-bold">{sealTagNumber}</span> have been submitted to the Admin QA queue for verification.
+                Actual weight of <span className="font-bold text-[#17231C]">{actualWeightKg} kg</span> and Security Seal <span className="font-mono text-[#15803D] font-bold">{sealTagNumber}</span> have been saved to PostgreSQL. Admin QA officers have been notified for cross-verification.
               </p>
             </div>
 
@@ -178,26 +218,29 @@ export const CollectWeightModal: React.FC<CollectWeightModalProps> = ({
               </span>
             </div>
 
-            {/* Upload weighing proof */}
+            {/* Upload weighing proof to Supabase Storage */}
             <div>
               <label className="block font-medium text-[#17231C] mb-1">
-                Weighing Scale Readout Slip / Photo Proof
+                Weighing Scale Readout Slip / Photo Proof (Supabase Storage)
               </label>
               <div className="flex items-center gap-3">
                 <label className="cursor-pointer px-3 py-2 border border-dashed border-[#E2E8E4] rounded-lg hover:border-[#15803D] bg-[#F8FAF8] text-[#64748B] flex items-center gap-2">
                   <Upload className="w-4 h-4 text-[#15803D]" />
-                  <span>{slipFileName}</span>
+                  <span>{slipFileName ? slipFileName : 'Upload Weighing Slip...'}</span>
                   <input 
                     type="file" 
-                    accept="image/*" 
+                    accept="image/*,application/pdf" 
                     className="hidden" 
                     onChange={(e) => {
-                      if (e.target.files?.[0]) setSlipFileName(e.target.files[0].name);
+                      if (e.target.files?.[0]) {
+                        setSlipFile(e.target.files[0]);
+                        setSlipFileName(e.target.files[0].name);
+                      }
                     }}
                   />
                 </label>
                 <span className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Scale Calibrated
+                  <ShieldCheck className="w-3.5 h-3.5" /> ISO/IEC 17025 Calibrated
                 </span>
               </div>
             </div>
@@ -219,16 +262,24 @@ export const CollectWeightModal: React.FC<CollectWeightModalProps> = ({
             <div className="pt-4 border-t border-[#E2E8E4] flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleFinish}
                 className="px-4 py-2 font-semibold text-[#64748B] hover:text-[#17231C]"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 font-semibold text-white bg-[#15803D] hover:bg-[#166534] rounded-lg transition-colors shadow-sm"
+                disabled={isSubmitting}
+                className="px-5 py-2 font-semibold text-white bg-[#15803D] hover:bg-[#166534] rounded-lg transition-colors shadow-sm flex items-center gap-1.5 disabled:opacity-50"
               >
-                Submit Collection Record
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Submitting Record...</span>
+                  </>
+                ) : (
+                  <span>Submit Collection Record</span>
+                )}
               </button>
             </div>
 

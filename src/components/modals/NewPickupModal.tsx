@@ -9,10 +9,13 @@ import {
   FileText, 
   Sparkles, 
   Upload, 
-  CheckCircle2 
+  CheckCircle2,
+  AlertCircle,
+  Loader2 
 } from 'lucide-react';
 import { INITIAL_CATEGORIES } from '../../lib/seedData';
 import { store } from '../../lib/store';
+import { storageService } from '../../services/storageService';
 
 interface NewPickupModalProps {
   isOpen: boolean;
@@ -25,7 +28,6 @@ export const NewPickupModal: React.FC<NewPickupModalProps> = ({
   onClose,
   preselectedCategoryId
 }) => {
-  const currentUser = store.getCurrentUser();
   const [categoryId, setCategoryId] = useState(preselectedCategoryId || 'cat-it');
   const [itemDescription, setItemDescription] = useState('');
   const [estimatedQuantity, setEstimatedQuantity] = useState(2);
@@ -35,7 +37,12 @@ export const NewPickupModal: React.FC<NewPickupModalProps> = ({
   const [preferredDate, setPreferredDate] = useState('2026-11-05');
   const [timeSlot, setTimeSlot] = useState('10:00 AM - 01:00 PM');
   const [specialNotes, setSpecialNotes] = useState('');
+  
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoName, setPhotoName] = useState<string | null>(null);
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [createdRequestId, setCreatedRequestId] = useState('');
 
@@ -45,29 +52,50 @@ export const NewPickupModal: React.FC<NewPickupModalProps> = ({
   const estimatedPoints = Math.round(estimatedWeightKg * selectedCategory.pointsPerKg);
   const estimatedCO2 = (estimatedWeightKg * selectedCategory.co2FactorPerKg).toFixed(1);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemDescription || estimatedWeightKg <= 0) return;
 
-    const newReq = store.createPickupRequest({
-      categoryId,
-      itemDescription,
-      estimatedQuantity,
-      estimatedWeightKg,
-      pickupAddress,
-      pickupCity,
-      preferredDate,
-      timeSlot,
-      specialNotes
-    });
+    setErrorMessage(null);
+    setIsSubmitting(true);
 
-    setCreatedRequestId(newReq.requestNumber);
-    setSubmitted(true);
+    try {
+      let photoUrl: string | undefined = undefined;
+      if (photoFile) {
+        const uploadRes = await storageService.uploadFile('ewaste-photos', photoFile.name, photoFile);
+        if (uploadRes.url) {
+          photoUrl = uploadRes.url;
+        }
+      }
+
+      const newReq = await store.createPickupRequest({
+        categoryId,
+        itemDescription,
+        estimatedQuantity,
+        estimatedWeightKg,
+        pickupAddress,
+        pickupCity,
+        preferredDate,
+        timeSlot,
+        specialNotes: photoUrl ? `${specialNotes} [Photo: ${photoUrl}]`.trim() : specialNotes
+      });
+
+      setCreatedRequestId(newReq.requestNumber);
+      setSubmitted(true);
+    } catch (err: any) {
+      console.error('Failed to create pickup request:', err);
+      setErrorMessage(err.message || 'Failed to submit pickup request to database.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleResetAndClose = () => {
     setSubmitted(false);
     setItemDescription('');
+    setPhotoFile(null);
+    setPhotoName(null);
+    setErrorMessage(null);
     onClose();
   };
 
@@ -95,6 +123,16 @@ export const NewPickupModal: React.FC<NewPickupModalProps> = ({
           </button>
         </div>
 
+        {errorMessage && (
+          <div className="m-5 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold block">Submission Error:</span>
+              <span>{errorMessage}</span>
+            </div>
+          </div>
+        )}
+
         {submitted ? (
           <div className="p-8 text-center space-y-4">
             <div className="w-14 h-14 rounded-full bg-emerald-100 text-[#15803D] flex items-center justify-center mx-auto">
@@ -106,7 +144,7 @@ export const NewPickupModal: React.FC<NewPickupModalProps> = ({
                 Request #{createdRequestId}
               </h4>
               <p className="text-xs text-[#64748B] max-w-md mx-auto mt-2 leading-relaxed">
-                Your e-waste pickup request has been routed to our central dispatch queue. A licensed collection partner will be assigned to confirm your preferred time slot ({preferredDate}, {timeSlot}).
+                Your e-waste pickup request has been saved to the PostgreSQL database and routed to central dispatch. A licensed partner will be assigned to confirm your preferred slot ({preferredDate}, {timeSlot}).
               </p>
             </div>
 
@@ -209,7 +247,7 @@ export const NewPickupModal: React.FC<NewPickupModalProps> = ({
                   Estimated Weight (kg) *
                 </label>
                 <div className="relative">
-                  <Scale className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Scale className="w-4 h-4 text-[#15803D] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="number"
                     min="0.5"
@@ -304,7 +342,7 @@ export const NewPickupModal: React.FC<NewPickupModalProps> = ({
               </div>
             </div>
 
-            {/* Notes & Photo Attachment Simulator */}
+            {/* Notes & Photo Attachment to Supabase Storage */}
             <div>
               <label className="block font-medium text-[#17231C] mb-1">
                 Access Instructions / Notes (Optional)
@@ -320,7 +358,7 @@ export const NewPickupModal: React.FC<NewPickupModalProps> = ({
 
             <div>
               <label className="block font-medium text-[#17231C] mb-1">
-                Attach Item Photo (Optional)
+                Attach Item Photograph (Uploaded to Supabase Storage)
               </label>
               <div className="flex items-center gap-3">
                 <label className="cursor-pointer px-3 py-2 border border-dashed border-[#E2E8E4] rounded-lg hover:border-[#15803D] bg-[#F8FAF8] text-[#64748B] flex items-center gap-2">
@@ -331,14 +369,20 @@ export const NewPickupModal: React.FC<NewPickupModalProps> = ({
                     accept="image/*" 
                     className="hidden" 
                     onChange={(e) => {
-                      if (e.target.files?.[0]) setPhotoName(e.target.files[0].name);
+                      if (e.target.files?.[0]) {
+                        setPhotoFile(e.target.files[0]);
+                        setPhotoName(e.target.files[0].name);
+                      }
                     }}
                   />
                 </label>
                 {photoName && (
                   <button 
                     type="button" 
-                    onClick={() => setPhotoName(null)}
+                    onClick={() => {
+                      setPhotoFile(null);
+                      setPhotoName(null);
+                    }}
                     className="text-[11px] text-red-600 hover:underline"
                   >
                     Remove
@@ -358,9 +402,17 @@ export const NewPickupModal: React.FC<NewPickupModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 text-xs font-semibold text-white bg-[#15803D] hover:bg-[#166534] rounded-lg transition-colors shadow-sm"
+                disabled={isSubmitting}
+                className="px-5 py-2 text-xs font-semibold text-white bg-[#15803D] hover:bg-[#166534] rounded-lg transition-colors shadow-sm flex items-center gap-1.5 disabled:opacity-50"
               >
-                Confirm Pickup Request
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving to Supabase...</span>
+                  </>
+                ) : (
+                  <span>Confirm Pickup Request</span>
+                )}
               </button>
             </div>
 

@@ -10,11 +10,13 @@ import {
   LogIn, 
   UserPlus, 
   Zap,
-  Check
+  Check,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { UserRole } from '../../types';
-import { store } from '../../lib/store';
-import { INITIAL_USERS } from '../../lib/seedData';
+import { useAuth } from '../../contexts/AuthContext';
+import { DEMO_CREDENTIALS } from '../../services/authService';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -29,6 +31,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onSuccess,
   initialRole = 'citizen'
 }) => {
+  const { login, loginDemoPersona, register, isConfigured } = useAuth();
+  
   const [activeTab, setActiveTab] = useState<'demo' | 'login' | 'register'>('demo');
   const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
   
@@ -43,34 +47,76 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regOrgName, setRegOrgName] = useState('');
   const [regPassword, setRegPassword] = useState('');
 
+  // Feedback & Loading
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+
   if (!isOpen) return null;
 
-  const handleQuickSwitch = (role: UserRole) => {
-    store.switchRole(role);
-    onSuccess();
-    onClose();
+  const handleQuickSwitch = async (role: UserRole) => {
+    setErrorMessage(null);
+    setSuccessNotice(null);
+    setIsSubmitting(true);
+
+    const res = await loginDemoPersona(role);
+    setIsSubmitting(false);
+
+    if (res.success) {
+      onSuccess();
+      onClose();
+    } else {
+      setErrorMessage(res.error || 'Authentication failed. Please verify Supabase configuration.');
+    }
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginEmail) return;
-    store.login(loginEmail, selectedRole);
-    onSuccess();
-    onClose();
+    if (!loginEmail || !loginPassword) return;
+
+    setErrorMessage(null);
+    setSuccessNotice(null);
+    setIsSubmitting(true);
+
+    const res = await login(loginEmail, loginPassword);
+    setIsSubmitting(false);
+
+    if (res.success) {
+      onSuccess();
+      onClose();
+    } else {
+      setErrorMessage(res.error || 'Invalid credentials or user does not exist.');
+    }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regEmail || !regFullName) return;
-    store.register({
+    if (!regEmail || !regFullName || !regPassword) return;
+
+    setErrorMessage(null);
+    setSuccessNotice(null);
+    setIsSubmitting(true);
+
+    const res = await register({
       fullName: regFullName,
       email: regEmail,
+      password: regPassword,
       phone: regPhone,
       role: selectedRole,
       organizationName: regOrgName
     });
-    onSuccess();
-    onClose();
+    setIsSubmitting(false);
+
+    if (res.success) {
+      if (res.emailConfirmationRequired) {
+        setSuccessNotice('Registration successful! Please check your email to confirm your account.');
+      } else {
+        onSuccess();
+        onClose();
+      }
+    } else {
+      setErrorMessage(res.error || 'Registration failed. Please check inputs.');
+    }
   };
 
   const roleMeta: Record<UserRole, { label: string; icon: React.ComponentType<{ className?: string }>; desc: string }> = {
@@ -114,7 +160,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               EcoTrack Access Portal
             </h3>
             <p className="text-xs text-[#64748B]">
-              Select a demo persona or authenticate with custom credentials
+              Authenticated via Supabase PostgreSQL & Auth
             </p>
           </div>
           <button
@@ -128,7 +174,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Navigation Tabs */}
         <div className="flex border-b border-[#E2E8E4] bg-[#F8FAF8] text-xs font-semibold">
           <button
-            onClick={() => setActiveTab('demo')}
+            onClick={() => {
+              setActiveTab('demo');
+              setErrorMessage(null);
+            }}
             className={`flex-1 py-3 px-4 text-center transition-colors flex items-center justify-center gap-1.5 ${
               activeTab === 'demo'
                 ? 'bg-white text-[#15803D] border-b-2 border-[#15803D]'
@@ -136,10 +185,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             }`}
           >
             <Zap className="w-3.5 h-3.5 text-amber-500" />
-            <span>1-Click Test Personas</span>
+            <span>Test Personas</span>
           </button>
           <button
-            onClick={() => setActiveTab('login')}
+            onClick={() => {
+              setActiveTab('login');
+              setErrorMessage(null);
+            }}
             className={`flex-1 py-3 px-4 text-center transition-colors flex items-center justify-center gap-1.5 ${
               activeTab === 'login'
                 ? 'bg-white text-[#15803D] border-b-2 border-[#15803D]'
@@ -150,7 +202,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <span>Log In</span>
           </button>
           <button
-            onClick={() => setActiveTab('register')}
+            onClick={() => {
+              setActiveTab('register');
+              setErrorMessage(null);
+            }}
             className={`flex-1 py-3 px-4 text-center transition-colors flex items-center justify-center gap-1.5 ${
               activeTab === 'register'
                 ? 'bg-white text-[#15803D] border-b-2 border-[#15803D]'
@@ -162,32 +217,50 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </div>
 
+        {/* Messages */}
+        {errorMessage && (
+          <div className="m-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold block">Authentication Error:</span>
+              <span>{errorMessage}</span>
+            </div>
+          </div>
+        )}
+
+        {successNotice && (
+          <div className="m-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-start gap-2">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold block">Notice:</span>
+              <span>{successNotice}</span>
+            </div>
+          </div>
+        )}
+
         {/* Tab Body */}
         <div className="p-6">
           
-          {/* TAB 1: 1-Click Fast Switch Demo Personas */}
+          {/* TAB 1: Real Supabase Demo Personas */}
           {activeTab === 'demo' && (
             <div className="space-y-4">
               <div className="p-3 bg-emerald-50/80 rounded-lg border border-emerald-100 text-xs text-emerald-900">
-                <span className="font-semibold block">⚡ Instant Evaluation Mode:</span>
-                Click any of the 5 pre-configured personas below to immediately enter their dashboard with live test data:
+                <span className="font-semibold block">⚡ Real Supabase Persona Sign-In:</span>
+                Authenticates directly via Supabase Auth with secure role profiles retrieved from PostgreSQL.
               </div>
 
               <div className="space-y-2">
-                {INITIAL_USERS.map((user) => {
-                  const meta = roleMeta[user.role];
+                {(['citizen', 'partner', 'recycler', 'organization', 'admin'] as UserRole[]).map((role) => {
+                  const meta = roleMeta[role];
                   const Icon = meta.icon;
-                  const isCurrent = store.getCurrentUser().id === user.id;
+                  const creds = DEMO_CREDENTIALS[role];
 
                   return (
                     <button
-                      key={user.id}
-                      onClick={() => handleQuickSwitch(user.role)}
-                      className={`w-full p-3 rounded-xl border text-left transition-all flex items-center justify-between group ${
-                        isCurrent 
-                          ? 'border-[#15803D] bg-emerald-50/40 ring-1 ring-[#15803D]' 
-                          : 'border-[#E2E8E4] hover:border-[#15803D] hover:bg-[#F8FAF8]'
-                      }`}
+                      key={role}
+                      disabled={isSubmitting}
+                      onClick={() => handleQuickSwitch(role)}
+                      className="w-full p-3 rounded-xl border border-[#E2E8E4] hover:border-[#15803D] hover:bg-[#F8FAF8] text-left transition-all flex items-center justify-between group disabled:opacity-50"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-lg bg-white border border-[#E2E8E4] flex items-center justify-center text-[#15803D] shrink-0">
@@ -196,26 +269,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-[#17231C]">
-                              {user.fullName}
+                              {creds.name}
                             </span>
                             <span className="text-[10px] font-semibold text-[#15803D] uppercase bg-emerald-100/60 px-1.5 py-0.2 rounded">
-                              {user.role}
+                              {role}
                             </span>
                           </div>
                           <span className="text-[11px] text-[#64748B] block mt-0.5">
-                            {meta.desc}
+                            {creds.email} · {meta.desc}
                           </span>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-[#15803D]">
-                        {isCurrent ? (
-                          <span className="flex items-center gap-1 text-emerald-700">
-                            <Check className="w-3.5 h-3.5" /> Active
-                          </span>
+                        {isSubmitting ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
                           <span className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                            Switch <ArrowRight className="w-3.5 h-3.5" />
+                            Sign In <ArrowRight className="w-3.5 h-3.5" />
                           </span>
                         )}
                       </div>
@@ -257,29 +328,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-[#17231C] mb-1">
-                  Role Workspace Target
-                </label>
-                <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value as UserRole)}
-                  className="w-full px-3 py-2 text-xs bg-[#F8FAF8] border border-[#E2E8E4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#15803D]"
-                >
-                  <option value="citizen">Citizen Dashboard</option>
-                  <option value="partner">Collection Partner Dashboard</option>
-                  <option value="recycler">Recycler Dashboard</option>
-                  <option value="organization">Organization (ITAD / EPR) Dashboard</option>
-                  <option value="admin">Administrator Compliance Dashboard</option>
-                </select>
-              </div>
-
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-2.5 bg-[#15803D] hover:bg-[#166534] text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                  disabled={isSubmitting}
+                  className="w-full py-2.5 bg-[#15803D] hover:bg-[#166534] text-white text-xs font-semibold rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  Sign In to Workspace
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Sign In with Supabase Auth</span>}
                 </button>
               </div>
 
@@ -289,7 +344,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   onClick={() => setActiveTab('demo')}
                   className="text-xs text-[#15803D] hover:underline"
                 >
-                  Or switch directly via 1-Click Test Personas →
+                  Or authenticate with pre-configured Test Personas →
                 </button>
               </div>
             </form>
@@ -300,7 +355,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <form onSubmit={handleRegisterSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-[#17231C] mb-1">
-                  I am Registering As
+                  Select Role Workspace *
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {(['citizen', 'partner', 'recycler', 'organization'] as UserRole[]).map((role) => (
@@ -398,9 +453,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-2.5 bg-[#15803D] hover:bg-[#166534] text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                  disabled={isSubmitting}
+                  className="w-full py-2.5 bg-[#15803D] hover:bg-[#166534] text-white text-xs font-semibold rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  Complete Registration
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Create Supabase Account</span>}
                 </button>
               </div>
             </form>
